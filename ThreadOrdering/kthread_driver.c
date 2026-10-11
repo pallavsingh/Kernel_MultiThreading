@@ -67,22 +67,18 @@ static const struct file_operations fops = {
     .read  = dev_read,
 };
 
-/*
- * Thread execution order:
- * A -> B -> C -> A -> ...
- */
-static int thread_function(void *data)
-{
+
+// Thread execution order:
+// A -> B -> C -> A -> ...
+
+static int thread_function(void *data) {
     int id = *(int *)data;
     char thread_name = 'A' + id;
     int written;
 
+
     while (!kthread_should_stop()) {
 
-        /*
-         * Wait until it is this thread's turn,
-         * or until the thread is asked to stop.
-         */
         wait_event_interruptible( turn_wait,
             READ_ONCE(current_turn) == id || kthread_should_stop()
         );
@@ -102,23 +98,24 @@ static int thread_function(void *data)
         current_turn = (current_turn + 1) % NTHREADS;
 
         mutex_unlock(&mutex_var);
-
         wake_up_all(&turn_wait);
     }
+
 
     printk(KERN_INFO "Thread %c is stopping\n", thread_name);
 
     return 0;
 }
 
-static int __init kthread_driver_init(void)
-{
+
+static int __init kthread_driver_init(void) {
     int i;
     int ret;
 
     printk(KERN_INFO "Initializing ordered KThread Driver\n");
 
     memset(message, 0, sizeof(message));
+
     message_len = 0;
     current_turn = 0;
 
@@ -147,7 +144,6 @@ static int __init kthread_driver_init(void)
     /* Create threads A, B, and C */
     for (i = 0; i < NTHREADS; i++) {
         thread_ids[i] = i;
-
         threads[i] = kthread_run( thread_function, &thread_ids[i], "thread_%c", 'A' + i);
         if (IS_ERR(threads[i])) {
             ret = PTR_ERR(threads[i]);
@@ -174,6 +170,7 @@ err_threads:
 
     device_destroy(kthread_class_ptr, MKDEV(major_number, 0));
     class_destroy(kthread_class_ptr);
+
     unregister_chrdev(major_number, DEVICE_NAME);
 
     return ret;
@@ -184,10 +181,6 @@ static void __exit kthread_driver_exit(void)
 {
     int i;
 
-    /*
-     * Stop every thread safely, including threads
-     * waiting for their turn.
-     */
     for (i = 0; i < NTHREADS; i++) {
         if (threads[i]) {
             kthread_stop(threads[i]);
@@ -198,6 +191,7 @@ static void __exit kthread_driver_exit(void)
 
     device_destroy(kthread_class_ptr, MKDEV(major_number, 0));
     class_destroy(kthread_class_ptr);
+
     unregister_chrdev(major_number, DEVICE_NAME);
 
     printk(KERN_INFO "Ordered KThread Driver unloaded\n");
